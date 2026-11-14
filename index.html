@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tại Sao Bút Bi Luôn Biến Mất Bí Ẩn? - 1 Phút Test</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,500;0,700;0,800;0,900;1,700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #060913;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    #stage-wrap {
+      position: relative;
+      width: 100vw;
+      height: 56.25vw;
+      max-height: 100vh;
+      max-width: 177.78vh;
+      overflow: hidden;
+      background: #0f172a;
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.85);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage-wrap">
+    <canvas id="cinema"></canvas>
+  </div>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById('cinema');
+      const ctx = canvas.getContext('2d');
+
+      const W = 1920;
+      const H = 1080;
+      canvas.width = W;
+      canvas.height = H;
+
+      function handleResize() {
+        // Locked 1920x1080 internal vector buffer for both browser preview & headless cloud render
+      }
+      window.addEventListener('resize', handleResize);
+
+      // Math & Easing Utilities
+      const TAU = Math.PI * 2;
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const lerp = (a, b, t) => a + (b - a) * clamp(t, 0, 1);
+      const invLerp = (a, b, v) => clamp((v - a) / (b - a || 1), 0, 1);
+      const easeOutCubic = (t) => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+      const easeInOutCubic = (t) => {
+        t = clamp(t, 0, 1);
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      };
+      const easeOutBack = (t) => {
+        t = clamp(t, 0, 1);
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      };
+
+      function seeded(seed) {
+        const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+        return x - Math.floor(x);
+      }
+
+      // ============================================================================
+      // OFFSCREEN CANVAS DOF CACHE (10x Faster Blur for Iris Xe & Cloud Runners)
+      // ============================================================================
+      const dofCache = new Map();
+      function getCachedLayer(key, blurPx, drawFn) {
+        if (dofCache.has(key)) return dofCache.get(key);
+        const off = document.createElement('canvas');
+        off.width = W;
+        off.height = H;
+        const octx = off.getContext('2d');
+        if (blurPx > 0) {
+          octx.filter = `blur(${blurPx}px)`;
+        }
+        drawFn(octx);
+        dofCache.set(key, off);
+        return off;
+      }
+
+      // Pre-seeded Bokeh & Chalk Dust Pool
+      const bokehParticles = Array.from({ length: 50 }, (_, i) => ({
+        x: seeded(i * 3 + 1) * W,
+        y: seeded(i * 3 + 2) * H,
+        r: 5 + seeded(i * 3 + 3) * 26,
+        depth: seeded(i * 7 + 5),
+        speedX: (seeded(i * 11 + 2) - 0.5) * 26,
+        speedY: -10 - seeded(i * 13 + 4) * 28,
+        phase: seeded(i * 17 + 9) * TAU
+      }));
+
+      // 60-Second Subtitle Timeline (10 Scenes)
+      const subtitles = [
+        { s: 0.0, e: 5.0, text: "Mỗi năm học trôi qua, hàng triệu cây bút bi bốc hơi khỏi mặt bàn..." },
+        { s: 5.0, e: 10.0, text: "Xin chào, tôi là Bi. Sáng thứ Hai, tôi còn nằm ngay ngắn trong hộp bút." },
+        { s: 10.0, e: 16.0, text: "Tôi rẻ, viết êm, mực ra đều. Ai đi thi cũng cần đến tôi." },
+        { s: 16.0, e: 22.0, text: "Nhưng tuổi thọ của tôi không tính bằng lượng mực... mà bằng số lần cho mượn." },
+        { s: 22.0, e: 28.0, text: "Chỉ một câu: \"Ê, cho mượn cây bút xíu!\"... là số phận tôi rẽ sang trang khác." },
+        { s: 28.0, e: 34.0, text: "\"Một xíu\" của họ kéo dài từ tiết Toán, qua tiết Văn, rồi bay sang lớp bên cạnh." },
+        { s: 34.0, e: 40.0, text: "Chưa hết! Kẻ thù lớn thứ hai của tôi chính là... trọng lực và khe bàn." },
+        { s: 40.0, e: 46.0, text: "Chỉ cần lăn nhẹ một vòng, tôi lập tức rơi vào \"hố đen\" gầm bàn đầy bụi." },
+        { s: 46.0, e: 52.0, text: "Chẳng ai cúi xuống tìm cây bút năm nghìn. Người ta chỉ mua luôn hộp mới." },
+        { s: 52.0, e: 60.0, text: "Nên nếu thấy tôi vẫn còn trên bàn... hãy giữ chặt tôi nhé, đừng để tôi đi lạc!" }
+      ];
+
+      const TOTAL_DURATION = 60.0;
+
+      // ============================================================================
+      // LIGHTING & POST-PROCESSING HELPERS
+      // ============================================================================
+      function drawVolumetricSpotlight(xTop, yTop, topW, bottomW, height, colorRGB, intensity, time) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const grad = ctx.createLinearGradient(xTop, yTop, xTop, yTop + height);
+        grad.addColorStop(0, `rgba(${colorRGB}, ${0.5 * intensity})`);
+        grad.addColorStop(0.6, `rgba(${colorRGB}, ${0.22 * intensity})`);
+        grad.addColorStop(1, `rgba(${colorRGB}, 0)`);
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(xTop - topW / 2, yTop);
+        ctx.lineTo(xTop + topW / 2, yTop);
+        ctx.lineTo(xTop + bottomW / 2, yTop + height);
+        ctx.lineTo(xTop - bottomW / 2, yTop + height);
+        ctx.closePath();
+        ctx.fill();
+
+        const floorGrad = ctx.createRadialGradient(
+          xTop, yTop + height * 0.92, 10,
+          xTop, yTop + height * 0.92, bottomW * 0.55
+        );
+        floorGrad.addColorStop(0, `rgba(${colorRGB}, ${0.38 * intensity})`);
+        floorGrad.addColorStop(1, `rgba(${colorRGB}, 0)`);
+        ctx.fillStyle = floorGrad;
+        ctx.beginPath();
+        ctx.ellipse(xTop, yTop + height * 0.92, bottomW * 0.55, 36, 0, 0, TAU);
+        ctx.fill();
+
+        for (let i = 0; i < 16; i++) {
+          const prog = (seeded(i * 19 + 3) + time * 0.07 * (0.5 + seeded(i * 5))) % 1;
+          const py = yTop + prog * height * 0.9;
+          const spread = lerp(topW * 0.35, bottomW * 0.44, prog);
+          const px = xTop + Math.sin(time * 1.3 + i * 2.1) * spread * 0.85;
+          const r = 2 + seeded(i * 23) * 4.5;
+          const alpha = Math.sin(prog * Math.PI) * 0.65 * intensity;
+          ctx.fillStyle = `rgba(255, 252, 230, ${alpha})`;
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawAmbientBokeh(time, colorRGB, density = 0.6) {
+        const count = Math.floor(bokehParticles.length * density);
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < count; i++) {
+          const p = bokehParticles[i];
+          const px = (p.x + p.speedX * time + Math.sin(time * 0.8 + p.phase) * 20 + W * 10) % W;
+          const py = (p.y + p.speedY * time + H * 10) % H;
+          const focalDist = Math.abs(p.depth - 0.45);
+          const rad = p.r * (0.6 + p.depth * 1.1) + focalDist * 12;
+          const alpha = (0.07 + (1 - focalDist) * 0.14) * (0.65 + 0.35 * Math.sin(time * 2.2 + p.phase));
+
+          const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
+          g.addColorStop(0, `rgba(${colorRGB}, ${alpha})`);
+          g.addColorStop(0.6, `rgba(${colorRGB}, ${alpha * 0.4})`);
+          g.addColorStop(1, `rgba(${colorRGB}, 0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(px, py, rad, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawVignette(strength = 0.28) {
+        ctx.save();
+        const vg = ctx.createRadialGradient(W / 2, H / 2, W * 0.34, W / 2, H / 2, W * 0.64);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, `rgba(4, 8, 18, ${strength})`);
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+
+      function drawShadow(x, y, rx, ry, alpha = 0.24) {
+        ctx.save();
+        const g = ctx.createRadialGradient(x, y, 2, x, y, rx);
+        g.addColorStop(0, `rgba(15, 23, 42, ${alpha})`);
+        g.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ============================================================================
+      // CHARACTER RIGS: BI (BÚT BI XANH), TẨY (CỤC TẨY) & STICKMAN HỌC SINH
+      // ============================================================================
+      function drawPenCharacter(opts) {
+        const {
+          x = W / 2,
+          y = H * 0.62,
+          scale = 1,
+          mood = 'normal', // 'normal', 'happy', 'proud', 'shocked', 'sad', 'cry', 'wink'
+          lookX = 0,
+          lookY = 0,
+          walkCycle = 0,
+          handsOnHips = false,
+          pointRight = false,
+          thumbsUp = false,
+          inkLevel = 0.82,
+          squash = 1,
+          tilt = 0,
+          sweating = false,
+          time = 0
+        } = opts;
+
+        const bodyW = 72 * scale;
+        const bodyH = 250 * scale;
+        const breath = Math.sin(time * 3.6) * 0.016;
+        const walkBounce = walkCycle ? Math.abs(Math.sin(walkCycle)) * 14 * scale : 0;
+        const sx = squash * (1 - breath * 0.5);
+        const sy = (1 / squash) * (1 + breath);
+
+        drawShadow(x, y + bodyH * 0.68, bodyW * 0.95, 15 * scale, 0.26);
+
+        ctx.save();
+        ctx.translate(x, y - walkBounce);
+        ctx.rotate(tilt);
+
+        // Stickman Legs
+        const legLen = 44 * scale;
+        const legSpread = bodyW * 0.28;
+        const lSwing = walkCycle ? Math.sin(walkCycle) * 0.45 : 0;
+        const rSwing = walkCycle ? -Math.sin(walkCycle) * 0.45 : 0;
+
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = Math.max(3, 5 * scale);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.save();
+        ctx.translate(-legSpread, bodyH * 0.5 * sy);
+        ctx.rotate(lSwing);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, legLen);
+        ctx.lineTo(-16 * scale, legLen);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(legSpread, bodyH * 0.5 * sy);
+        ctx.rotate(rSwing);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, legLen);
+        ctx.lineTo(16 * scale, legLen);
+        ctx.stroke();
+        ctx.restore();
+
+        // Main Pen Body
+        ctx.save();
+        ctx.scale(sx, sy);
+
+        // 1. Top Clicker Button & Blue Clip Cap
+        ctx.fillStyle = '#1d4ed8';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.8 * scale;
+        ctx.beginPath();
+        ctx.roundRect(-bodyW * 0.34, -bodyH * 0.62, bodyW * 0.68, bodyH * 0.16, 12 * scale);
+        ctx.fill();
+        ctx.stroke();
+
+        // Side Pocket Clip
+        ctx.fillStyle = '#2563eb';
+        ctx.beginPath();
+        ctx.moveTo(bodyW * 0.48, -bodyH * 0.46);
+        ctx.lineTo(bodyW * 0.72, -bodyH * 0.42);
+        ctx.lineTo(bodyW * 0.72, -bodyH * 0.12);
+        ctx.lineTo(bodyW * 0.48, -bodyH * 0.16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 2. Translucent Plastic Barrel
+        const barrelGrad = ctx.createLinearGradient(-bodyW / 2, 0, bodyW / 2, 0);
+        barrelGrad.addColorStop(0, '#dbeafe');
+        barrelGrad.addColorStop(0.3, '#eff6ff');
+        barrelGrad.addColorStop(0.75, '#bfdbfe');
+        barrelGrad.addColorStop(1, '#93c5fd');
+        ctx.fillStyle = barrelGrad;
+        ctx.beginPath();
+        ctx.roundRect(-bodyW / 2, -bodyH * 0.48, bodyW, bodyH * 0.78, 16 * scale);
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner Ink Tube (Visible through translucent barrel)
+        const maxTubeH = bodyH * 0.68;
+        const curInkH = maxTubeH * clamp(inkLevel, 0.1, 1);
+        ctx.fillStyle = '#1e40af';
+        ctx.fillRect(-bodyW * 0.13, bodyH * 0.26 - curInkH, bodyW * 0.26, curInkH);
+
+        // Blue Rubber Grip Zone at lower barrel
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(-bodyW / 2, bodyH * 0.1, bodyW, bodyH * 0.18);
+        ctx.strokeRect(-bodyW / 2, bodyH * 0.1, bodyW, bodyH * 0.18);
+
+        // Specular Gloss Strip on Barrel
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+        ctx.beginPath();
+        ctx.roundRect(-bodyW * 0.36, -bodyH * 0.42, bodyW * 0.13, bodyH * 0.64, 6 * scale);
+        ctx.fill();
+
+        // 3. Tapered Cone & Metallic Ballpoint Tip at Bottom
+        ctx.fillStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.moveTo(-bodyW * 0.46, bodyH * 0.3);
+        ctx.lineTo(bodyW * 0.46, bodyH * 0.3);
+        ctx.lineTo(bodyW * 0.14, bodyH * 0.5);
+        ctx.lineTo(-bodyW * 0.14, bodyH * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Ballpoint nib
+        ctx.fillStyle = '#1d4ed8';
+        ctx.beginPath();
+        ctx.arc(0, bodyH * 0.52, 9 * scale, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+
+        // 4. Expressive Eyes & Face
+        const blinkCycle = (time * 0.38 + 0.15) % 1;
+        const isBlinking = blinkCycle > 0.95;
+        const eyeY = -bodyH * 0.16;
+        const eyeSpacing = bodyW * 0.24;
+        const eyeW = 15 * scale;
+        const eyeH = 20 * scale;
+
+        [-1, 1].forEach((side) => {
+          const ex = side * eyeSpacing;
+          const isWink = mood === 'wink' && side === 1;
+          const isHappy = mood === 'happy';
+
+          if (isBlinking || isWink || isHappy) {
+            ctx.strokeStyle = '#111827';
+            ctx.lineWidth = 4.2 * scale;
+            ctx.beginPath();
+            if (isWink || isHappy) {
+              ctx.arc(ex, eyeY + 3 * scale, eyeW * 0.75, Math.PI * 1.1, Math.PI * 1.9);
+            } else {
+              ctx.moveTo(ex - eyeW, eyeY);
+              ctx.lineTo(ex + eyeW, eyeY);
+            }
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#111827';
+            ctx.lineWidth = 3.8 * scale;
+            ctx.beginPath();
+            ctx.ellipse(ex, eyeY, eyeW, eyeH, 0, 0, TAU);
+            ctx.fill();
+            ctx.stroke();
+
+            const px = ex + clamp(lookX, -1, 1) * eyeW * 0.35;
+            const py = eyeY + clamp(lookY, -1, 1) * eyeH * 0.35;
+            const pr = (mood === 'shocked' ? 5.5 : 8.5) * scale;
+            ctx.fillStyle = '#111827';
+            ctx.beginPath();
+            ctx.arc(px, py, pr, 0, TAU);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(px - pr * 0.3, py - pr * 0.3, pr * 0.35, 0, TAU);
+            ctx.fill();
+
+            if (mood === 'cry') {
+              const tearY = eyeY + eyeH * 0.85 + ((time * 55 + (side > 0 ? 12 : 0)) % 24) * scale;
+              ctx.fillStyle = '#38bdf8';
+              ctx.beginPath();
+              ctx.ellipse(ex + side * 4 * scale, tearY, 4.5 * scale, 7.5 * scale, 0, 0, TAU);
+              ctx.fill();
+            }
+          }
+
+          // Eyebrows
+          ctx.strokeStyle = '#111827';
+          ctx.lineWidth = 4 * scale;
+          const browY = eyeY - eyeH - 8 * scale;
+          ctx.beginPath();
+          if (mood === 'sad' || mood === 'cry' || mood === 'shocked') {
+            ctx.moveTo(ex - side * 13 * scale, browY - 3 * scale);
+            ctx.lineTo(ex + side * 13 * scale, browY + 6 * scale);
+          } else if (mood === 'proud') {
+            ctx.moveTo(ex - side * 13 * scale, browY + 5 * scale);
+            ctx.lineTo(ex + side * 13 * scale, browY - 4 * scale);
+          } else {
+            ctx.arc(ex, browY + 6 * scale, 13 * scale, Math.PI * 1.2, Math.PI * 1.8);
+          }
+          ctx.stroke();
+        });
+
+        // Mouth
+        const mouthY = -bodyH * 0.03;
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4 * scale;
+        ctx.beginPath();
+        if (mood === 'sad' || mood === 'cry') {
+          ctx.arc(0, mouthY + 12 * scale, 14 * scale, Math.PI * 1.18, Math.PI * 1.82);
+          ctx.stroke();
+        } else if (mood === 'shocked') {
+          ctx.fillStyle = '#991b1b';
+          ctx.ellipse(0, mouthY, 8 * scale, 11 * scale, 0, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.arc(0, mouthY - 5 * scale, 15 * scale, Math.PI * 0.15, Math.PI * 0.85);
+          ctx.stroke();
+        }
+
+        // Sweat drops
+        if (sweating) {
+          ctx.fillStyle = '#38bdf8';
+          const syOff = (time * 40) % 20;
+          ctx.beginPath();
+          ctx.ellipse(bodyW * 0.65, -bodyH * 0.25 + syOff * scale, 5 * scale, 9 * scale, 0.2, 0, TAU);
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        ctx.restore(); // End squash/stretch
+
+        // Arms
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = Math.max(3, 4.5 * scale);
+        const armY = -bodyH * 0.04;
+        const armLen = 46 * scale;
+
+        if (handsOnHips) {
+          ctx.beginPath();
+          ctx.moveTo(-bodyW * 0.5, armY);
+          ctx.lineTo(-bodyW * 0.95, armY + 18 * scale);
+          ctx.lineTo(-bodyW * 0.52, armY + 36 * scale);
+          ctx.moveTo(bodyW * 0.5, armY);
+          ctx.lineTo(bodyW * 0.95, armY + 18 * scale);
+          ctx.lineTo(bodyW * 0.52, armY + 36 * scale);
+          ctx.stroke();
+        } else {
+          const la = 0.45 + Math.sin(time * 3.2) * 0.1;
+          const lx2 = -bodyW * 0.5 - Math.cos(la) * armLen;
+          const ly2 = armY + Math.sin(la) * armLen;
+          ctx.beginPath();
+          ctx.moveTo(-bodyW * 0.5, armY);
+          ctx.lineTo(lx2, ly2);
+          ctx.stroke();
+
+          const ra = pointRight ? -0.35 : thumbsUp ? -0.7 : 0.45 - Math.sin(time * 3.2) * 0.1;
+          const rx2 = bodyW * 0.5 + Math.cos(ra) * armLen;
+          const ry2 = armY + Math.sin(ra) * armLen;
+          ctx.beginPath();
+          ctx.moveTo(bodyW * 0.5, armY);
+          ctx.lineTo(rx2, ry2);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      function drawEraserBuddy(x, y, scale = 1, time = 0) {
+        drawShadow(x, y + 52 * scale, 52 * scale, 12 * scale, 0.25);
+        ctx.save();
+        ctx.translate(x, y + Math.sin(time * 3) * 3 * scale);
+        ctx.scale(scale, scale);
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.2;
+
+        // White eraser rubber
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath();
+        ctx.roundRect(-48, -36, 96, 72, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // Blue & Red cardboard sleeve
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(-48, 0, 96, 36);
+        ctx.strokeRect(-48, 0, 96, 36);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-48, 0, 96, 10);
+        ctx.strokeRect(-48, 0, 96, 10);
+
+        // Cute sad eyes
+        ctx.fillStyle = '#111827';
+        ctx.beginPath();
+        ctx.arc(-14, -14, 5, 0, TAU);
+        ctx.arc(14, -14, 5, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawBannerText(text, x, y, size, fillColor, strokeColor = '#111827', scale = 1, tilt = 0) {
+        if (scale <= 0.01) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(tilt);
+        ctx.scale(scale, scale);
+        ctx.font = `900 ${size}px 'Be Vietnam Pro', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.fillStyle = strokeColor;
+        for (let d = 6; d >= 1; d--) {
+          ctx.fillText(text, d * 0.8, d * 1.1);
+        }
+        ctx.lineWidth = Math.max(6, size * 0.16);
+        ctx.strokeStyle = strokeColor;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(text, 0, 0);
+        ctx.fillStyle = fillColor;
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
+
+      function drawRibbonBanner(text, x, y, bgColor = '#1d4ed8', scale = 1) {
+        if (scale <= 0.01) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+        ctx.font = `800 38px 'Be Vietnam Pro', sans-serif`;
+        const tw = ctx.measureText(text).width;
+        const w = tw + 90;
+        const h = 68;
+
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.fillStyle = bgColor;
+        [-1, 1].forEach((side) => {
+          ctx.beginPath();
+          ctx.moveTo(side * (w / 2 - 10), -h / 2 + 12);
+          ctx.lineTo(side * (w / 2 + 36), -h / 2 + 12);
+          ctx.lineTo(side * (w / 2 + 18), 12);
+          ctx.lineTo(side * (w / 2 + 36), h / 2 + 12);
+          ctx.lineTo(side * (w / 2 - 10), h / 2 + 12);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        });
+
+        ctx.beginPath();
+        ctx.roundRect(-w / 2, -h / 2, w, h, 8);
+        ctx.fill();
+        ctx.stroke();
+        drawBannerText(text, 0, 2, 36, '#ffffff', '#111827');
+        ctx.restore();
+      }
+
+      // ============================================================================
+      // 10 SCENES FOR THE 60-SECOND TEST ANIMATION
+      // ============================================================================
+
+      // Scene 1 (00:00 - 00:05): Glowing Blue Ink Line & Vanishing Pens in Dark Void
+      function renderScene01(lt, time) {
+        const bg = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.65);
+        bg.addColorStop(0, '#172554');
+        bg.addColorStop(1, '#090d16');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        drawAmbientBokeh(time, '96, 165, 250', 0.85);
+
+        const prog = easeOutCubic(lt / 2.2);
+
+        // Glowing blue ink trail across the screen
+        ctx.save();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.shadowColor = '#0284c7';
+        ctx.shadowBlur = 32;
+        ctx.lineWidth = 14;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let i = 0; i <= 60; i++) {
+          const t = (i / 60) * prog;
+          const px = lerp(220, 1700, t);
+          const py = H * 0.5 + Math.sin(t * Math.PI * 3) * 140;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // Ghostly pens fading into sparkles
+        for (let p = 0; p < 5; p++) {
+          const px = 380 + p * 290;
+          const py = 460 + Math.sin(time * 2 + p) * 35;
+          const fade = clamp(1 - (lt - p * 0.45) / 2.2, 0.15, 0.85);
+          ctx.save();
+          ctx.globalAlpha = fade;
+          drawPenCharacter({ x: px, y: py, scale: 0.72, mood: 'shocked', time });
+          ctx.restore();
+        }
+      }
+
+      // Scene 2 (00:05 - 00:10): Classroom Desk, Sunlight & Bi Intro
+      function renderScene02(lt, time) {
+        // Cached blurred classroom background (window + bookshelf)
+        const bgLayer = getCachedLayer('classroom_bg', 3.5, (octx) => {
+          octx.fillStyle = '#fef3c7';
+          octx.fillRect(0, 0, W, H);
+          // Window
+          octx.fillStyle = '#bae6fd';
+          octx.strokeStyle = '#111827';
+          octx.lineWidth = 5;
+          octx.fillRect(160, 90, 380, 320);
+          octx.strokeRect(160, 90, 380, 320);
+          // Bookshelf on right
+          octx.fillStyle = '#d97706';
+          octx.fillRect(1420, 140, 340, 480);
+          octx.strokeRect(1420, 140, 340, 480);
+        });
+        ctx.drawImage(bgLayer, 0, 0);
+
+        // Warm morning sunlight beam from window
+        drawVolumetricSpotlight(350, 90, 340, 880, 680, '255, 248, 195', 0.65, time);
+
+        // Sharp Wooden Desk Foreground
+        ctx.fillStyle = '#d99b52';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.fillRect(0, 740, W, H - 740);
+        ctx.strokeRect(0, 740, W, H - 740);
+
+        drawRibbonBanner('BI – BÚT BI XANH', W / 2, 155, '#1d4ed8', easeOutBack(lt / 0.5));
+
+        // Pencil Holder Cup on Desk
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath();
+        ctx.roundRect(560, 540, 155, 200, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // Happy Bi standing on desk
+        drawPenCharacter({
+          x: W / 2 + 40,
+          y: 560,
+          scale: 1.25,
+          mood: 'happy',
+          walkCycle: time * 6,
+          pointRight: true,
+          time
+        });
+      }
+
+      // Scene 3 (00:10 - 00:16): RẺ, ÊM, MỰC ĐỀU
+      function renderScene03(lt, time) {
+        const bg = ctx.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, W * 0.65);
+        bg.addColorStop(0, '#ecfdf5');
+        bg.addColorStop(1, '#6ee7b7');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = '#34d399';
+        ctx.fillRect(0, 790, W, H - 790);
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath(); ctx.moveTo(0, 790); ctx.lineTo(W, 790); ctx.stroke();
+
+        drawPenCharacter({
+          x: W / 2,
+          y: 590,
+          scale: 1.4,
+          mood: 'proud',
+          handsOnHips: true,
+          time
+        });
+
+        if (lt > 0.4) drawBannerText('RẺ (5.000đ)', 420, 340, 62, '#facc15', '#111827', easeOutBack((lt - 0.4) / 0.45), -0.14);
+        if (lt > 1.4) drawBannerText('VIẾT ÊM', W / 2, 165, 68, '#38bdf8', '#111827', easeOutBack((lt - 1.4) / 0.45), 0);
+        if (lt > 2.4) drawBannerText('MỰC ĐỀU', 1500, 340, 62, '#f472b6', '#111827', easeOutBack((lt - 2.4) / 0.45), 0.14);
+      }
+
+      // Scene 4 (00:16 - 00:22): 85% Ink Left vs Giant Hand Grabbing Bi
+      function renderScene04(lt, time) {
+        const bgLayer = getCachedLayer('notebook_grid', 2.0, (octx) => {
+          octx.fillStyle = '#f8fafc';
+          octx.fillRect(0, 0, W, H);
+          octx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+          octx.lineWidth = 2;
+          for (let x = 0; x < W; x += 64) { octx.beginPath(); octx.moveTo(x, 0); octx.lineTo(x, H); octx.stroke(); }
+          for (let y = 0; y < H; y += 64) { octx.beginPath(); octx.moveTo(0, y); octx.lineTo(W, y); octx.stroke(); }
+        });
+        ctx.drawImage(bgLayer, 0, 0);
+
+        // Ink level meter on left
+        ctx.fillStyle = '#e2e8f0';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath(); ctx.roundRect(220, 220, 480, 56, 28); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#2563eb';
+        ctx.beginPath(); ctx.roundRect(226, 226, 400, 44, 22); ctx.fill();
+        drawBannerText('LƯỢNG MỰC: 85%', 460, 165, 48, '#1d4ed8', '#ffffff');
+
+        // Giant Hand swooping down after lt = 2.2s
+        const grabT = easeInOutCubic(invLerp(2.0, 4.2, lt));
+        const penY = lerp(590, 260, grabT);
+
+        drawPenCharacter({
+          x: 1180,
+          y: penY,
+          scale: 1.35,
+          mood: grabT > 0.1 ? 'shocked' : 'normal',
+          sweating: grabT > 0.1,
+          time
+        });
+
+        if (grabT > 0.02) {
+          ctx.save();
+          ctx.translate(1480 - grabT * 240, -120 + grabT * 360);
+          ctx.rotate(-0.35);
+          ctx.fillStyle = '#fed7aa';
+          ctx.strokeStyle = '#111827';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.roundRect(-40, -320, 80, 340, 36);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Scene 5 (00:22 - 00:28): Classroom "Ê, CHO MƯỢN CÂY BÚT XÍU!" with Rack Focus DOF
+      function renderScene05(lt, time) {
+        ctx.fillStyle = '#fef9c3';
+        ctx.fillRect(0, 0, W, H);
+
+        // Blurred student on left (Rack-focus background)
+        const leftBlur = getCachedLayer('left_student_blur', 5.0, (octx) => {
+          octx.strokeStyle = '#111827';
+          octx.lineWidth = 6;
+          octx.fillStyle = '#ffffff';
+          octx.beginPath(); octx.arc(420, 480, 68, 0, TAU); octx.fill(); octx.stroke();
+          octx.fillStyle = '#3b82f6';
+          octx.beginPath(); octx.moveTo(420, 548); octx.lineTo(360, 760); octx.lineTo(480, 760); octx.closePath(); octx.fill(); octx.stroke();
+        });
+        ctx.drawImage(leftBlur, 0, 0);
+
+        // Sharp Borrower Student on Right + Sweating Bi
+        ctx.save();
+        ctx.translate(1280, 520);
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 5;
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath(); ctx.moveTo(0, 65); ctx.lineTo(-55, 250); ctx.lineTo(55, 250); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(0, 0, 64, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#111827';
+        ctx.beginPath(); ctx.arc(-18, -6, 8, 0, TAU); ctx.arc(14, -6, 8, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(-2, 18, 18, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+        ctx.restore();
+
+        drawPenCharacter({
+          x: 860,
+          y: 590,
+          scale: 1.15,
+          mood: 'shocked',
+          sweating: true,
+          lookX: 0.6,
+          time
+        });
+
+        // Speech Bubble "MƯỢN XÍU!"
+        const bs = easeOutBack(lt / 0.5);
+        ctx.save();
+        ctx.translate(1160, 235);
+        ctx.scale(bs, bs);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath(); ctx.ellipse(0, 0, 250, 70, 0, 0, TAU); ctx.fill(); ctx.stroke();
+        drawBannerText('CHO MƯỢN XÍU!', 0, 4, 42, '#ea580c', '#111827');
+        ctx.restore();
+      }
+
+      // Scene 6 (00:28 - 00:34): Fast Spinning Clock & Passing Across Classes
+      function renderScene06(lt, time) {
+        const bg = ctx.createLinearGradient(0, 0, W, H);
+        bg.addColorStop(0, '#c4b5fd');
+        bg.addColorStop(1, '#93c5fd');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        // Speed lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.lineWidth = 4;
+        for (let i = 0; i < 14; i++) {
+          const ly = 120 + i * 68;
+          const lx = ((time * 950 + i * 230) % (W + 400)) - 200;
+          ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx - 240, ly); ctx.stroke();
+        }
+
+        // Fast-spinning Clock in Top Center
+        ctx.save();
+        ctx.translate(W / 2, 230);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(0, 0, 105, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(time * 12) * 76, Math.sin(time * 12) * 76); ctx.stroke();
+        ctx.strokeStyle = '#111827';
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(time * 3) * 52, Math.sin(time * 3) * 52); ctx.stroke();
+        ctx.restore();
+
+        // Bi flying across 3 subject signs: TOÁN -> VĂN -> LỚP KẾ BÊN
+        const labels = ['TIẾT TOÁN', 'TIẾT VĂN', 'LỚP BÊN CẠNH'];
+        labels.forEach((lb, idx) => {
+          const lx = 380 + idx * 580;
+          drawBannerText(lb, lx, 780, 48, '#facc15', '#111827');
+        });
+
+        const bx = lerp(320, 1600, (lt % 3.0) / 3.0);
+        drawPenCharacter({
+          x: bx,
+          y: 540 + Math.sin(time * 10) * 35,
+          scale: 1.15,
+          mood: 'cry',
+          tilt: time * 4,
+          time
+        });
+      }
+
+      // Scene 7 (00:34 - 00:40): Rolling Off Desk Edge ("TỌT!")
+      function renderScene07(lt, time) {
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, '#fde68a');
+        bg.addColorStop(0.55, '#d97706');
+        bg.addColorStop(1, '#090d16');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        // Desk Surface on Left Half with Gap on Right
+        ctx.fillStyle = '#b4692c';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 5;
+        ctx.fillRect(0, 480, 1120, 65);
+        ctx.strokeRect(0, 480, 1120, 65);
+
+        const rollT = clamp(lt / 2.2, 0, 1);
+        const fallT = clamp((lt - 2.2) / 1.8, 0, 1);
+
+        const px = rollT < 1 ? lerp(360, 1160, easeInOutCubic(rollT)) : 1160 + fallT * 80;
+        const py = rollT < 1 ? 390 : lerp(390, 980, fallT * fallT);
+
+        drawPenCharacter({
+          x: px,
+          y: py,
+          scale: 1.2,
+          mood: 'shocked',
+          tilt: rollT * Math.PI * 2 + fallT * 1.8,
+          time
+        });
+
+        if (lt > 2.1) {
+          drawBannerText('TỌT!', 1320, 360, 105, '#ef4444', '#111827', easeOutBack((lt - 2.1) / 0.4), 0.18);
+        }
+      }
+
+      // Scene 8 (00:40 - 00:46): Dark Under-Desk Void, Volumetric Crevice Beam & Eraser Buddy
+      function renderScene08(lt, time) {
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = '#111827';
+        ctx.fillRect(0, 810, W, H - 810);
+
+        // Dramatic Volumetric Light Cone from Desk Crevice Above
+        drawVolumetricSpotlight(W / 2 - 80, -20, 90, 640, 860, '186, 230, 253', 0.95, time);
+        drawAmbientBokeh(time, '255, 255, 255', 0.9);
+
+        // Sad Bi & Eraser Buddy in the dusty shadows
+        drawPenCharacter({
+          x: W / 2 - 110,
+          y: 635,
+          scale: 1.3,
+          mood: 'cry',
+          inkLevel: 0.75,
+          time
+        });
+
+        drawEraserBuddy(W / 2 + 165, 745, 1.25, time);
+
+        drawBannerText('HỐ ĐEN GẦM BÀN', W / 2, 165, 68, '#38bdf8', '#111827', easeOutBack(lt / 0.5));
+      }
+
+      // Scene 9 (00:46 - 00:52): Student Buying a Brand New Box of Pens While Bi Watches
+      function renderScene09(lt, time) {
+        const bg = ctx.createRadialGradient(W / 2, H / 2, 100, W / 2, H / 2, W * 0.65);
+        bg.addColorStop(0, '#fff1f2');
+        bg.addColorStop(1, '#fecdd3');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = '#fda4af';
+        ctx.fillRect(0, 795, W, H - 795);
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath(); ctx.moveTo(0, 795); ctx.lineTo(W, 795); ctx.stroke();
+
+        // Happy student holding shiny new pen box
+        ctx.save();
+        ctx.translate(W / 2 - 60, 560);
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 5;
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath(); ctx.moveTo(0, 40); ctx.lineTo(-45, 235); ctx.lineTo(45, 235); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(0, -35, 58, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#111827';
+        ctx.beginPath(); ctx.arc(-14, -40, 7, 0, TAU); ctx.arc(16, -40, 7, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(2, -20, 16, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+
+        // Glowing New Pen Box above head
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.roundRect(-130, -210, 260, 90, 12); ctx.fill(); ctx.stroke();
+        drawBannerText('HỘP MỚI', 0, -165, 38, '#111827', '#ffffff');
+        ctx.restore();
+
+        // Tiny forgotten Bi in bottom right corner
+        drawPenCharacter({
+          x: 1540,
+          y: 675,
+          scale: 0.72,
+          mood: 'sad',
+          lookX: -0.7,
+          time
+        });
+      }
+
+      // Scene 10 (00:52 - 01:00): Golden Sunset Desk Finale ("GIỮ CHẶT TÔI NHÉ!")
+      function renderScene10(lt, time) {
+        const sky = ctx.createLinearGradient(0, 0, 0, H);
+        sky.addColorStop(0, '#f59e0b');
+        sky.addColorStop(0.55, '#fde047');
+        sky.addColorStop(1, '#fef9c3');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, W, H);
+
+        drawVolumetricSpotlight(W / 2, 0, 420, 1280, 820, '255, 240, 180', 0.75, time);
+        drawAmbientBokeh(time, '255, 255, 255', 0.85);
+
+        ctx.fillStyle = '#d99b52';
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 4.5;
+        ctx.fillRect(0, 780, W, H - 780);
+        ctx.strokeRect(0, 780, W, H - 780);
+
+        drawPenCharacter({
+          x: W / 2,
+          y: 575,
+          scale: 1.45,
+          mood: lt > 1.2 ? 'wink' : 'happy',
+          thumbsUp: true,
+          time
+        });
+
+        drawBannerText('GIỮ CHẶT TÔI NHÉ!', W / 2, 175, 76, '#ffffff', '#111827', easeOutBack(lt / 0.5));
+
+        // Floating Hearts
+        [[620, 440], [1310, 410], [540, 310]].forEach(([hx, hy], idx) => {
+          const yOff = Math.sin(time * 3.5 + idx) * 16;
+          ctx.save();
+          ctx.translate(hx, hy + yOff);
+          ctx.fillStyle = '#f43f5e';
+          ctx.strokeStyle = '#111827';
+          ctx.lineWidth = 3.5;
+          const s = 28;
+          ctx.beginPath();
+          ctx.moveTo(0, s * 0.35);
+          ctx.bezierCurveTo(-s, -s * 0.4, -s * 0.5, -s * 1.1, 0, -s * 0.4);
+          ctx.bezierCurveTo(s * 0.5, -s * 1.1, s, -s * 0.4, 0, s * 0.35);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+
+      function drawSubtitle(time) {
+        const sub = subtitles.find((item) => time >= item.s && time < item.e);
+        if (!sub) return;
+
+        const fadeIn = clamp((time - sub.s) / 0.15, 0, 1);
+        const fadeOut = clamp((sub.e - time) / 0.15, 0, 1);
+        const alpha = Math.min(fadeIn, fadeOut);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = `800 42px 'Be Vietnam Pro', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const y = H - 86 + (1 - fadeIn) * 8;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 4;
+
+        ctx.strokeStyle = '#090d16';
+        ctx.lineWidth = 11;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(sub.text, W / 2, y);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(sub.text, W / 2, y);
+        ctx.restore();
+      }
+
+      const scenes = [
+        { s: 0.0, e: 5.0, fn: renderScene01, vig: 0.45 },
+        { s: 5.0, e: 10.0, fn: renderScene02, vig: 0.24 },
+        { s: 10.0, e: 16.0, fn: renderScene03, vig: 0.22 },
+        { s: 16.0, e: 22.0, fn: renderScene04, vig: 0.24 },
+        { s: 22.0, e: 28.0, fn: renderScene05, vig: 0.26 },
+        { s: 28.0, e: 34.0, fn: renderScene06, vig: 0.26 },
+        { s: 34.0, e: 40.0, fn: renderScene07, vig: 0.35 },
+        { s: 40.0, e: 46.0, fn: renderScene08, vig: 0.5 },
+        { s: 46.0, e: 52.0, fn: renderScene09, vig: 0.24 },
+        { s: 52.0, e: 60.0, fn: renderScene10, vig: 0.24 }
+      ];
+
+      let manualRenderMode = false;
+      let startTimestamp = null;
+
+      function drawAtTime(elapsed) {
+        const t = ((elapsed % TOTAL_DURATION) + TOTAL_DURATION) % TOTAL_DURATION;
+        ctx.clearRect(0, 0, W, H);
+
+        const active = scenes.find((sc) => t >= sc.s && t < sc.e) || scenes[0];
+        const lt = t - active.s;
+        const dur = active.e - active.s;
+
+        const pushScale = 1 + (lt / dur) * 0.025;
+        ctx.save();
+        ctx.translate(W / 2, H / 2);
+        ctx.scale(pushScale, pushScale);
+        ctx.translate(-W / 2, -H / 2);
+        active.fn(lt, t);
+        ctx.restore();
+
+        drawVignette(active.vig);
+        drawSubtitle(t);
+      }
+
+      // Deterministic frame hook for Headless Cloud / GitHub Actions Renderer
+      window.renderFrameAt = function (timeInSeconds) {
+        manualRenderMode = true;
+        drawAtTime(timeInSeconds);
+      };
+
+      function loop(timestamp) {
+        if (manualRenderMode) return;
+        if (!startTimestamp) startTimestamp = timestamp;
+        const elapsed = (timestamp - startTimestamp) / 1000;
+        drawAtTime(elapsed);
+        requestAnimationFrame(loop);
+      }
+
+      window.onload = function () {
+        requestAnimationFrame(loop);
+      };
+    })();
+  </script>
+</body>
+</html>

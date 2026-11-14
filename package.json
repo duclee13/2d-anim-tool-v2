@@ -1,0 +1,12 @@
+{
+  "name": "but-bi-2d-cloud-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render:local": "node scripts/render_chunk.mjs --shard=0 --total-shards=1 --fps=60 --duration=60 --out=out/video_full.mp4"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
