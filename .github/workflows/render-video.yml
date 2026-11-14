@@ -1,0 +1,80 @@
+name: Render 2D Canvas Animation (60FPS Cloud Matrix)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  render-shards:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Render Video Shard ${{ matrix.shard }}
+        run: |
+          node scripts/render_chunk.mjs \
+            --shard=${{ matrix.shard }} \
+            --total-shards=4 \
+            --fps=60 \
+            --duration=60 \
+            --out=out/chunk_${{ matrix.shard }}.mp4
+
+      - name: Upload Shard Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-shard-${{ matrix.shard }}
+          path: out/chunk_${{ matrix.shard }}.mp4
+
+  merge-and-mux:
+    needs: render-shards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python for Edge-TTS
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate Vietnamese Voiceover (Edge-TTS)
+        run: |
+          pip install edge-tts
+          python3 scripts/generate_tts.py
+
+      - name: Download All Video Shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: video-shard-*
+          path: shards
+          merge-multiple: true
+
+      - name: Concatenate Shards & Mux Audio with FFmpeg
+        run: |
+          for i in 0 1 2 3; do
+            echo "file '$PWD/shards/chunk_${i}.mp4'" >> concat_list.txt
+          done
+          ffmpeg -y -f concat -safe 0 -i concat_list.txt -i out/voiceover.mp3 \
+            -c:v copy -c:a aac -b:a 192k -shortest but_bi_bien_mat_1080p60.mp4
+
+      - name: Upload Final MP4 Video
+        uses: actions/upload-artifact@v4
+        with:
+          name: but_bi_bien_mat_1080p60
+          path: but_bi_bien_mat_1080p60.mp4
